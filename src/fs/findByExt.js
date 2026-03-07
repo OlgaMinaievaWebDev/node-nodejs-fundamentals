@@ -2,31 +2,48 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const findByExt = async () => {
-  // Write your code here
-  // Recursively find all files with specific extension
-  // Parse --ext CLI argument (default: .txt)
-
   const workspacePath = path.resolve('workspace');
 
+  // Parse CLI argument and ensure it starts with a dot
   const extIndex = process.argv.indexOf('--ext');
-  const targetExt = extIndex !== -1 ? process.argv[extIndex + 1] : '.txt';
+  let targetExt = extIndex !== -1 ? process.argv[extIndex + 1] : '.txt';
+  if (targetExt && !targetExt.startsWith('.')) {
+    targetExt = `.${targetExt}`;
+  }
 
-  async function scanDir(currentDir) {
-    const data = await fs.readdir(currentDir, { withFileTypes: true });
+  const foundFiles = [];
 
-    for (const entry of data) {
-      const absPath = path.join(currentDir, entry.name);
-      if (entry.isDirectory()) {
-        await scanDir(absPath);
-      } else if (entry.isFile()) {
-        const extension = path.extname(entry.name);
-        if (extension === targetExt) {
-          console.log(path.relative(workspacePath, absPath));
+  try {
+    // Check if workspace exists
+    await fs.access(workspacePath);
+
+    async function scanDir(currentDir) {
+      const dirents = await fs.readdir(currentDir, { withFileTypes: true });
+
+      for (const dirent of dirents) {
+        const absPath = path.join(currentDir, dirent.name);
+
+        if (dirent.isDirectory()) {
+          await scanDir(absPath);
+        } else if (dirent.isFile()) {
+          if (path.extname(dirent.name) === targetExt) {
+            // Store relative path for later sorting
+            foundFiles.push(path.relative(workspacePath, absPath));
+          }
         }
       }
     }
+
+    await scanDir(workspacePath);
+
+    // Sort alphabetically and print
+    foundFiles.sort().forEach((filePath) => {
+      // Ensure we use forward slashes for consistent output
+      console.log(filePath.split(path.sep).join('/'));
+    });
+  } catch (err) {
+    throw new Error('FS operation failed');
   }
-  await scanDir(workspacePath);
 };
 
 await findByExt();
